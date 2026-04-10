@@ -1,19 +1,33 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { SAMPLE_CALLS, CallRecord, CallStatus } from "../data";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
-const PAGE_SIZE = 6;
+const BACKEND_URL = "https://voice-agent-backend-y0t9.onrender.com";
+
+interface CallRecord {
+  call_sid: string;
+  caller: string;
+  called: string;
+  business_name: string;
+  industry: string;
+  duration: number;
+  started_at: string;
+  ended_at: string;
+  status: string;
+}
 
 function formatDuration(seconds: number): string {
-  if (seconds === 0) return "—";
+  if (!seconds || seconds < 1) return "—";
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -22,246 +36,137 @@ function formatTime(iso: string): string {
   });
 }
 
-const STATUS_STYLES: Record<CallStatus, string> = {
-  completed: "bg-green-100 text-green-700",
-  missed: "bg-red-100 text-red-700",
-  voicemail: "bg-yellow-100 text-yellow-700",
-  active: "bg-blue-100 text-blue-700",
-};
-
-function CallDetailPanel({ call, onClose }: { call: CallRecord; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Call Details</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-        <dl className="space-y-3 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-gray-500 font-medium">Caller</dt>
-            <dd className="text-gray-900">{call.caller}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500 font-medium">Time</dt>
-            <dd className="text-gray-900">{formatTime(call.time)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500 font-medium">Duration</dt>
-            <dd className="text-gray-900">{formatDuration(call.duration)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500 font-medium">Industry</dt>
-            <dd className="text-gray-900">{call.industry}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500 font-medium">Business</dt>
-            <dd className="text-gray-900">{call.businessName}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500 font-medium">Status</dt>
-            <dd>
-              <span
-                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[call.status]}`}
-              >
-                {call.status}
-              </span>
-            </dd>
-          </div>
-          {call.notes && (
-            <div className="pt-2 border-t border-gray-100">
-              <dt className="text-gray-500 font-medium mb-1">Notes</dt>
-              <dd className="text-gray-800">{call.notes}</dd>
-            </div>
-          )}
-        </dl>
-        <button
-          onClick={onClose}
-          className="w-full mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function CallsPage() {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<CallStatus | "all">("all");
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<CallRecord | null>(null);
+  const [calls, setCalls] = useState<CallRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = useMemo(() => {
-    return SAMPLE_CALLS.filter((c) => {
-      const matchSearch =
-        search === "" ||
-        c.caller.toLowerCase().includes(search.toLowerCase()) ||
-        c.industry.toLowerCase().includes(search.toLowerCase()) ||
-        c.businessName.toLowerCase().includes(search.toLowerCase());
-      const matchStatus =
-        statusFilter === "all" || c.status === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [search, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const paginated = filtered.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
-
-  function handleSearchChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setSearch(e.target.value);
-    setPage(1);
-  }
-
-  function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    setStatusFilter(e.target.value as CallStatus | "all");
-    setPage(1);
-  }
+  useEffect(() => {
+    async function fetchCalls() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/call-log`);
+        const data = await res.json();
+        setCalls(data.calls || []);
+      } catch (err) {
+        console.error("Error fetching calls:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchCalls();
+    const interval = setInterval(fetchCalls, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <div className="space-y-6">
-      {selected && (
-        <CallDetailPanel call={selected} onClose={() => setSelected(null)} />
-      )}
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white border-b shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-600 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm">
+              A
+            </div>
+            <span className="font-semibold text-lg text-gray-900">
+              Aria Voice AI
+            </span>
+          </div>
+          <div className="flex gap-6 text-sm font-medium text-gray-600">
+            <Link href="/" className="hover:text-indigo-600">
+              Dashboard
+            </Link>
+            <Link href="/calls" className="text-indigo-600">
+              Calls
+            </Link>
+            <Link href="/settings" className="hover:text-indigo-600">
+              Settings
+            </Link>
+          </div>
+        </div>
+      </nav>
 
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Call Log</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          All calls handled by your AI receptionist.
-        </p>
-      </div>
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">Call Log</h1>
+          <p className="text-gray-500 mt-1">
+            Complete history of all calls handled by your AI receptionist.
+          </p>
+        </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <input
-          type="text"
-          placeholder="Search by caller, industry, or business…"
-          value={search}
-          onChange={handleSearchChange}
-          className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <select
-          value={statusFilter}
-          onChange={handleStatusChange}
-          className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-        >
-          <option value="all">All Statuses</option>
-          <option value="completed">Completed</option>
-          <option value="missed">Missed</option>
-          <option value="voicemail">Voicemail</option>
-          <option value="active">Active</option>
-        </select>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Time
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Caller
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Duration
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Industry
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {paginated.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-10 text-center text-sm text-gray-400"
-                  >
-                    No calls match your filters.
-                  </td>
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p className="text-gray-500">Loading calls...</p>
+          </div>
+        ) : calls.length === 0 ? (
+          <div className="bg-white rounded-xl border px-6 py-16 text-center">
+            <p className="text-lg text-gray-500 mb-2">No calls yet</p>
+            <p className="text-sm text-gray-400">
+              Call{" "}
+              <span className="font-mono text-indigo-600">(423) 556-3838</span>{" "}
+              to test your AI receptionist!
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-gray-500 border-b bg-gray-50">
+                  <th className="px-6 py-3">Time</th>
+                  <th className="px-6 py-3">Caller</th>
+                  <th className="px-6 py-3">Business</th>
+                  <th className="px-6 py-3">Industry</th>
+                  <th className="px-6 py-3">Duration</th>
+                  <th className="px-6 py-3">Status</th>
                 </tr>
-              ) : (
-                paginated.map((call) => (
+              </thead>
+              <tbody>
+                {calls.map((call, i) => (
                   <tr
-                    key={call.id}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => setSelected(call)}
+                    key={call.call_sid || i}
+                    className="border-b last:border-b-0 hover:bg-gray-50"
                   >
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                      {formatTime(call.time)}
+                    <td className="px-6 py-3 text-gray-600">
+                      {formatTime(call.started_at)}
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                    <td className="px-6 py-3 font-medium text-gray-900">
                       {call.caller}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                      {formatDuration(call.duration)}
+                    <td className="px-6 py-3 text-gray-600">
+                      {call.business_name}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                    <td className="px-6 py-3 text-gray-600 capitalize">
                       {call.industry}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-6 py-3 text-gray-600">
+                      {formatDuration(call.duration)}
+                    </td>
+                    <td className="px-6 py-3">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[call.status]}`}
+                        className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
+                          call.status === "completed"
+                            ? "bg-green-100 text-green-700"
+                            : call.status === "active"
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
                       >
-                        {call.status}
+                        {call.status === "completed"
+                          ? "Completed"
+                          : call.status === "active"
+                          ? "Active"
+                          : "Missed"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-blue-600 whitespace-nowrap text-right">
-                      Details →
-                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">
-          <span>
-            {filtered.length === 0
-              ? "0 results"
-              : `Showing ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(
-                  currentPage * PAGE_SIZE,
-                  filtered.length
-                )} of ${filtered.length}`}
-          </span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
-            >
-              ← Prev
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="px-3 py-1 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
-            >
-              Next →
-            </button>
+                ))}
+              </tbody>
+            </table>
           </div>
+        )}
+
+        <div className="mt-4 text-center text-xs text-gray-400">
+          <p>Showing {calls.length} call(s) • Auto-refreshes every 15s</p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
