@@ -1,231 +1,297 @@
 "use client";
 
-import { useState } from "react";
-import { INDUSTRIES } from "../data";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
-interface Settings {
-  businessName: string;
+const BACKEND_URL = "https://voice-agent-backend-y0t9.onrender.com";
+
+interface BusinessConfig {
+  business_name: string;
+  agent_name: string;
   industry: string;
-  agentName: string;
+  owner_email: string;
+  owner_phone: string;
   greeting: string;
-  ownerEmail: string;
-  ownerPhone: string;
-  smsEnabled: boolean;
-  emailEnabled: boolean;
-}
-
-const DEFAULT_SETTINGS: Settings = {
-  businessName: "Cool Breeze HVAC",
-  industry: "HVAC",
-  agentName: "Aria",
-  greeting:
-    "Hi, thanks for calling Cool Breeze HVAC! I'm Aria, your AI receptionist. How can I help you today?",
-  ownerEmail: "owner@example.com",
-  ownerPhone: "+1 (555) 000-0000",
-  smsEnabled: true,
-  emailEnabled: true,
-};
-
-function Toggle({
-  checked,
-  onChange,
-  label,
-  description,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <p className="text-sm font-medium text-gray-900">{label}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{description}</p>
-      </div>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-          checked ? "bg-blue-600" : "bg-gray-200"
-        }`}
-        role="switch"
-        aria-checked={checked}
-      >
-        <span
-          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
-            checked ? "translate-x-5" : "translate-x-0"
-          }`}
-        />
-      </button>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  id,
-  children,
-}: {
-  label: string;
-  id: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1.5">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
+  voice: string;
+  notify_sms: boolean;
+  notify_email: boolean;
 }
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [toast, setToast] = useState(false);
+  const [businesses, setBusinesses] = useState<Record<string, BusinessConfig>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
 
-  function set<K extends keyof Settings>(key: K, value: Settings[K]) {
-    setSettings((s) => ({ ...s, [key]: value }));
-  }
+  useEffect(() => {
+    async function fetchBusinesses() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/businesses`);
+        const data = await res.json();
+        setBusinesses(data.configs || {});
+      } catch (err) {
+        console.error("Error fetching businesses:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchBusinesses();
+  }, []);
 
-  function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setToast(true);
-    setTimeout(() => setToast(false), 3000);
-  }
+  const handleSave = async (phone: string, config: BusinessConfig) => {
+    setSaving(true);
+    setMessage("");
+    try {
+      const res = await fetch(`${BACKEND_URL}/register-business`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ twilio_number: phone, ...config }),
+      });
+      if (res.ok) {
+        setMessage("Settings saved successfully!");
+        setTimeout(() => setMessage(""), 3000);
+      }
+    } catch (err) {
+      setMessage("Error saving settings");
+    } finally {
+      setSaving(false);
+    }
+  };
 
-  const inputClass =
-    "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+  const entries = Object.entries(businesses);
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      {/* Toast */}
-      {toast && (
-        <div className="fixed top-6 right-6 z-50 bg-green-600 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg flex items-center gap-2">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-          Settings saved successfully!
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white border-b shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-600 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm">
+              A
+            </div>
+            <span className="font-semibold text-lg text-gray-900">
+              Aria Voice AI
+            </span>
+          </div>
+          <div className="flex gap-6 text-sm font-medium text-gray-600">
+            <Link href="/" className="hover:text-indigo-600">
+              Dashboard
+            </Link>
+            <Link href="/calls" className="hover:text-indigo-600">
+              Calls
+            </Link>
+            <Link href="/settings" className="text-indigo-600">
+              Settings
+            </Link>
+          </div>
         </div>
-      )}
+      </nav>
 
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Configure your AI receptionist and notification preferences.
-        </p>
-      </div>
-
-      <form onSubmit={handleSave} className="space-y-6">
-        {/* Business info */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
-          <h3 className="text-base font-semibold text-gray-900">Business Information</h3>
-
-          <FormField label="Business Name" id="businessName">
-            <input
-              id="businessName"
-              type="text"
-              value={settings.businessName}
-              onChange={(e) => set("businessName", e.target.value)}
-              className={inputClass}
-            />
-          </FormField>
-
-          <FormField label="Industry" id="industry">
-            <select
-              id="industry"
-              value={settings.industry}
-              onChange={(e) => set("industry", e.target.value)}
-              className={inputClass}
-            >
-              {INDUSTRIES.map((ind) => (
-                <option key={ind} value={ind}>
-                  {ind}
-                </option>
-              ))}
-            </select>
-          </FormField>
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <p className="text-gray-500 mt-1">
+            Manage your AI receptionist configuration.
+          </p>
         </div>
 
-        {/* Agent config */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
-          <h3 className="text-base font-semibold text-gray-900">AI Agent Configuration</h3>
+        {message && (
+          <div className="mb-6 px-4 py-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
+            {message}
+          </div>
+        )}
 
-          <FormField label="Agent Name" id="agentName">
-            <input
-              id="agentName"
-              type="text"
-              value={settings.agentName}
-              onChange={(e) => set("agentName", e.target.value)}
-              className={inputClass}
-            />
-          </FormField>
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p className="text-gray-500">Loading settings...</p>
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="bg-white rounded-xl border px-6 py-16 text-center">
+            <p className="text-lg text-gray-500">No businesses configured yet</p>
+          </div>
+        ) : (
+          entries.map(([phone, config]) => (
+            <div key={phone} className="bg-white rounded-xl border p-6 mb-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {config.business_name}
+                  </h2>
+                  <p className="text-sm text-gray-500 font-mono">{phone}</p>
+                </div>
+                <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                  Active
+                </span>
+              </div>
 
-          <FormField label="Custom Greeting" id="greeting">
-            <textarea
-              id="greeting"
-              rows={3}
-              value={settings.greeting}
-              onChange={(e) => set("greeting", e.target.value)}
-              className={inputClass + " resize-none"}
-            />
-          </FormField>
-        </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Business Name
+                  </label>
+                  <input
+                    type="text"
+                    value={config.business_name}
+                    onChange={(e) =>
+                      setBusinesses((prev) => ({
+                        ...prev,
+                        [phone]: { ...config, business_name: e.target.value },
+                      }))
+                    }
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Agent Name
+                  </label>
+                  <input
+                    type="text"
+                    value={config.agent_name}
+                    onChange={(e) =>
+                      setBusinesses((prev) => ({
+                        ...prev,
+                        [phone]: { ...config, agent_name: e.target.value },
+                      }))
+                    }
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Industry
+                  </label>
+                  <select
+                    value={config.industry}
+                    onChange={(e) =>
+                      setBusinesses((prev) => ({
+                        ...prev,
+                        [phone]: { ...config, industry: e.target.value },
+                      }))
+                    }
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    {["towing", "locksmith", "hvac", "plumbing", "dental", "real_estate", "pest_control", "roofing", "auto_repair", "veterinary", "legal", "electrical", "general"].map((ind) => (
+                      <option key={ind} value={ind}>
+                        {ind.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Voice
+                  </label>
+                  <select
+                    value={config.voice}
+                    onChange={(e) =>
+                      setBusinesses((prev) => ({
+                        ...prev,
+                        [phone]: { ...config, voice: e.target.value },
+                      }))
+                    }
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    {["Kore", "Puck", "Charon", "Fenrir", "Aoede"].map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notification Email
+                  </label>
+                  <input
+                    type="email"
+                    value={config.owner_email}
+                    onChange={(e) =>
+                      setBusinesses((prev) => ({
+                        ...prev,
+                        [phone]: { ...config, owner_email: e.target.value },
+                      }))
+                    }
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notification Phone (SMS)
+                  </label>
+                  <input
+                    type="tel"
+                    value={config.owner_phone}
+                    onChange={(e) =>
+                      setBusinesses((prev) => ({
+                        ...prev,
+                        [phone]: { ...config, owner_phone: e.target.value },
+                      }))
+                    }
+                    placeholder="+1234567890"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Custom Greeting (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={config.greeting}
+                    onChange={(e) =>
+                      setBusinesses((prev) => ({
+                        ...prev,
+                        [phone]: { ...config, greeting: e.target.value },
+                      }))
+                    }
+                    placeholder="Thank you for calling..."
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
 
-        {/* Owner contact */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
-          <h3 className="text-base font-semibold text-gray-900">Owner Contact</h3>
-
-          <FormField label="Email Address" id="ownerEmail">
-            <input
-              id="ownerEmail"
-              type="email"
-              value={settings.ownerEmail}
-              onChange={(e) => set("ownerEmail", e.target.value)}
-              className={inputClass}
-            />
-          </FormField>
-
-          <FormField label="Phone Number" id="ownerPhone">
-            <input
-              id="ownerPhone"
-              type="tel"
-              value={settings.ownerPhone}
-              onChange={(e) => set("ownerPhone", e.target.value)}
-              className={inputClass}
-            />
-          </FormField>
-        </div>
-
-        {/* Notification preferences */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
-          <h3 className="text-base font-semibold text-gray-900">Notification Preferences</h3>
-
-          <Toggle
-            checked={settings.smsEnabled}
-            onChange={(v) => set("smsEnabled", v)}
-            label="SMS Notifications"
-            description="Receive a text message after each call."
-          />
-          <Toggle
-            checked={settings.emailEnabled}
-            onChange={(v) => set("emailEnabled", v)}
-            label="Email Notifications"
-            description="Receive an email summary after each call."
-          />
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            Save Settings
-          </button>
-        </div>
-      </form>
+              <div className="mt-6 flex items-center justify-between">
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={config.notify_email}
+                      onChange={(e) =>
+                        setBusinesses((prev) => ({
+                          ...prev,
+                          [phone]: { ...config, notify_email: e.target.checked },
+                        }))
+                      }
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    Email notifications
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={config.notify_sms}
+                      onChange={(e) =>
+                        setBusinesses((prev) => ({
+                          ...prev,
+                          [phone]: { ...config, notify_sms: e.target.checked },
+                        }))
+                      }
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    SMS notifications
+                  </label>
+                </div>
+                <button
+                  onClick={() => handleSave(phone, config)}
+                  disabled={saving}
+                  className="px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </main>
     </div>
   );
 }
